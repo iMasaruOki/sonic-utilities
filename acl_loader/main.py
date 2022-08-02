@@ -81,6 +81,7 @@ class AclLoader(object):
     ACL_STAGE_CAPABILITY_TABLE = "ACL_STAGE_CAPABILITY_TABLE"
     ACL_ACTIONS_CAPABILITY_FIELD = "action_list"
     ACL_ACTION_CAPABILITY_FIELD = "ACL_ACTION"
+    ACL_COUNTER_RULE_MAP = "ACL_COUNTER_RULE_MAP"
 
     min_priority = 1
     max_priority = 10000
@@ -116,6 +117,7 @@ class AclLoader(object):
         self.tables_db_info = {}
         self.rules_db_info = {}
         self.rules_info = {}
+        self.counters_db_info = {}
 
         # Load database config files
         load_db_config()
@@ -125,6 +127,8 @@ class AclLoader(object):
         self.configdb.connect()
         self.statedb = SonicV2Connector(host="127.0.0.1")
         self.statedb.connect(self.statedb.STATE_DB)
+        self.counters_db = SonicV2Connector()
+        self.counters_db.connect(self.counters_db.COUNTERS_DB)
 
         # For multi-npu architecture we will have both global and per front asic namespace.
         # Global namespace will be used for Control plane ACL which are via IPTables.
@@ -155,6 +159,7 @@ class AclLoader(object):
         self.read_rules_info()
         self.read_sessions_info()
         self.read_policers_info()
+        self.read_counters_info()
 
     def read_tables_info(self):
         """
@@ -225,6 +230,18 @@ class AclLoader(object):
 
     def get_sessions_db_info(self):
         return self.sessions_db_info
+
+    def read_counters_info(self):
+        """
+        """
+        exists = self.counters_db.exists(self.counters_db.COUNTERS_DB, 'ACL_COUNTER_RULE_MAP')
+        if exists:
+            counters_db_info = self.counters_db.get_all(self.counters_db.COUNTERS_DB, 'ACL_COUNTER_RULE_MAP')
+            for (key, oid) in counters_db_info.items():
+                counter_entry = self.counters_db.get_all(self.counters_db.COUNTERS_DB, 'COUNTERS:{}'.format(oid))
+                self.counters_db_info[key] = {}
+                self.counters_db_info[key]["bytes"] = counter_entry["SAI_ACL_COUNTER_ATTR_BYTES"]
+                self.counters_db_info[key]["packets"] = counter_entry["SAI_ACL_COUNTER_ATTR_PACKETS"]
 
     def get_session_name(self):
         """
@@ -870,7 +887,7 @@ class AclLoader(object):
         :param rule_id: Optional. ACL rule name. Filter rule by specified rule name.
         :return:
         """
-        header = ("Table", "Rule", "Priority", "Action", "Match")
+        header = ("Table", "Rule", "Priority", "Action", "Match", "Bytes", "Packets")
 
         def pop_priority(val):
             priority = "N/A"
@@ -916,11 +933,17 @@ class AclLoader(object):
             priority = pop_priority(val)
             action = pop_action(val)
             matches = pop_matches(val)
+            if "{}:{}".format(tname, rid) in self.counters_db_info:
+                count_bytes = self.counters_db_info["{}:{}".format(tname, rid)]["bytes"]
+                count_packets = self.counters_db_info["{}:{}".format(tname, rid)]["packets"]
+            else:
+                count_bytes = "0"
+                count_packets = "0"
 
-            rule_data = [[tname, rid, priority, action, matches[0]]]
+            rule_data = [[tname, rid, priority, action, matches[0], count_bytes, count_packets]]
             if len(matches) > 1:
                 for m in matches[1:]:
-                    rule_data.append(["", "", "", "", m])
+                    rule_data.append(["", "", "", "", m, "", ""])
 
             raw_data.append([priority, rule_data])
 
