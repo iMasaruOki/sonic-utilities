@@ -240,8 +240,9 @@ class AclLoader(object):
             for (key, oid) in counters_db_info.items():
                 counter_entry = self.counters_db.get_all(self.counters_db.COUNTERS_DB, 'COUNTERS:{}'.format(oid))
                 self.counters_db_info[key] = {}
-                self.counters_db_info[key]["bytes"] = counter_entry["SAI_ACL_COUNTER_ATTR_BYTES"]
-                self.counters_db_info[key]["packets"] = counter_entry["SAI_ACL_COUNTER_ATTR_PACKETS"]
+                if counter_entry != None:
+                    self.counters_db_info[key]["bytes"] = counter_entry["SAI_ACL_COUNTER_ATTR_BYTES"]
+                    self.counters_db_info[key]["packets"] = counter_entry["SAI_ACL_COUNTER_ATTR_PACKETS"]
 
     def get_session_name(self):
         """
